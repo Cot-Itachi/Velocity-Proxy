@@ -126,6 +126,29 @@ public class DatabasePool {
                 "enabled INTEGER DEFAULT 1)"
             );
 
+            // Punishment tables
+            conn.createStatement().execute(
+                "CREATE TABLE IF NOT EXISTS punishments (" +
+                "id TEXT PRIMARY KEY," +
+                "target_uuid TEXT NOT NULL," +
+                "issuer_uuid TEXT," +
+                "type TEXT NOT NULL," +
+                "reason TEXT NOT NULL," +
+                "issued_at INTEGER NOT NULL," +
+                "expires_at INTEGER NOT NULL," +
+                "active INTEGER DEFAULT 1)"
+            );
+
+            conn.createStatement().execute(
+                "CREATE TABLE IF NOT EXISTS ip_bans (" +
+                "id TEXT PRIMARY KEY," +
+                "ip_address TEXT NOT NULL," +
+                "issuer_uuid TEXT," +
+                "reason TEXT NOT NULL," +
+                "issued_at INTEGER NOT NULL," +
+                "active INTEGER DEFAULT 1)"
+            );
+
             // Indices
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_friends_lookup ON friends(player_uuid)");
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_requests_lookup ON friend_requests(receiver_uuid)");
@@ -137,6 +160,11 @@ public class DatabasePool {
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_alt_links ON alt_links(player2_uuid)");
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_login_history ON login_history(player_uuid)");
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_login_history_time ON login_history(timestamp)");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_punishments_target ON punishments(target_uuid)");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_punishments_active ON punishments(active)");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_punishments_type ON punishments(type)");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_ip_bans_active ON ip_bans(active)");
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_ip_bans_ip ON ip_bans(ip_address)");
         } catch (SQLException e) {
             e.printStackTrace();
         }

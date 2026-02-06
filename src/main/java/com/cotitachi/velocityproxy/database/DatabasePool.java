@@ -3,6 +3,8 @@ package com.cotitachi.velocityproxy.database;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -17,7 +19,14 @@ public class DatabasePool {
     private final HikariDataSource dataSource;
 
     public DatabasePool(Path dataFolder) {
+        try {
+            Files.createDirectories(dataFolder);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to create data directory", e);
+        }
+
         HikariConfig config = new HikariConfig();
+        config.setDriverClassName("org.sqlite.JDBC");
         config.setJdbcUrl("jdbc:sqlite:" + dataFolder.resolve("friends.db"));
         config.setMaximumPoolSize(10);
         config.setConnectionTimeout(10000);
@@ -29,7 +38,6 @@ public class DatabasePool {
 
     private void initTables() {
         try (Connection conn = getConnection()) {
-            // Friends tables
             conn.createStatement().execute(
                 "CREATE TABLE IF NOT EXISTS friends (" +
                 "player_uuid TEXT NOT NULL," +
@@ -59,7 +67,6 @@ public class DatabasePool {
                 "updated INTEGER NOT NULL)"
             );
 
-            // Party tables
             conn.createStatement().execute(
                 "CREATE TABLE IF NOT EXISTS parties (" +
                 "id INTEGER PRIMARY KEY," +
@@ -84,7 +91,6 @@ public class DatabasePool {
                 "PRIMARY KEY (party_id, invited_uuid))"
             );
 
-            // Alt detection tables
             conn.createStatement().execute(
                 "CREATE TABLE IF NOT EXISTS player_ips (" +
                 "player_uuid TEXT NOT NULL," +
@@ -126,7 +132,6 @@ public class DatabasePool {
                 "enabled INTEGER DEFAULT 1)"
             );
 
-            // Punishment tables
             conn.createStatement().execute(
                 "CREATE TABLE IF NOT EXISTS punishments (" +
                 "id TEXT PRIMARY KEY," +
@@ -149,7 +154,6 @@ public class DatabasePool {
                 "active INTEGER DEFAULT 1)"
             );
 
-            // Indices
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_friends_lookup ON friends(player_uuid)");
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_requests_lookup ON friend_requests(receiver_uuid)");
             conn.createStatement().execute("CREATE INDEX IF NOT EXISTS idx_uuid_cache ON uuid_cache(uuid)");

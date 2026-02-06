@@ -228,8 +228,8 @@ public class PartyCommand {
         pm.invitePlayer(party.getId(), tid);
         p.sendMessage(Component.text("Invited " + pm.getName(tid), NamedTextColor.GREEN));
 
-        plugin.getServer().getPlayer(tid).ifPresent(target -> 
-            target.sendMessage(Component.text("Party invite from ", NamedTextColor.GRAY)
+        plugin.getServer().getPlayer(tid).ifPresent(invitedPlayer -> 
+            invitedPlayer.sendMessage(Component.text("Party invite from ", NamedTextColor.GRAY)
                 .append(Component.text(p.getUsername(), NamedTextColor.YELLOW))
                 .append(Component.text(" - ", NamedTextColor.DARK_GRAY))
                 .append(Component.text("/party accept " + p.getUsername(), NamedTextColor.AQUA)))

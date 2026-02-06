@@ -98,8 +98,8 @@ public class VelocityProxy {
             cm.register(cm.metaBuilder("find").build(), modCmd.createFind());
             cm.register(cm.metaBuilder("alert").build(), modCmd.createAlert());
 
-            server.getEventManager().register(this, new PlayerListener(friendManager, uuidCache));
-            server.getEventManager().register(this, new PartyListener(partyManager));
+            server.getEventManager().register(this, new PlayerListener(friendManager, uuidCache, server));
+            server.getEventManager().register(this, new PartyListener(partyManager, server));
             server.getEventManager().register(this, new AltDetectionListener(altDetectionManager));
             server.getEventManager().register(this, new PunishmentListener(punishmentManager));
 

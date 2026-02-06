@@ -202,10 +202,6 @@ public class PunishmentManager {
                     }
                 }
             );
-
-            server.getPlayer(target).ifPresent(player ->
-                player.sendMessage(Component.text("You have been unmuted", NamedTextColor.GREEN))
-            );
         }
     }
 
@@ -214,62 +210,64 @@ public class PunishmentManager {
         long now = System.currentTimeMillis();
 
         Punishment punishment = new Punishment(id, target, issuer, PunishmentType.WARN, reason, now, -1, true);
-
-        int currentWarns = warnCounts.getOrDefault(target, 0) + 1;
-        warnCounts.put(target, currentWarns);
-
         savePunishment(punishment);
 
+        int count = warnCounts.getOrDefault(target, 0) + 1;
+        warnCounts.put(target, count);
+
         server.getPlayer(target).ifPresent(player -> {
-            player.sendMessage(Component.text("WARNING", NamedTextColor.RED));
-            player.sendMessage(Component.text(""));
-            player.sendMessage(Component.text("You have been warned by " + getName(issuer), NamedTextColor.GRAY));
-            player.sendMessage(Component.text("Reason: " + reason, NamedTextColor.WHITE));
-            player.sendMessage(Component.text(""));
-            player.sendMessage(Component.text("This is warning " + currentWarns + " of " + MAX_WARNINGS, NamedTextColor.YELLOW));
-            if (currentWarns >= MAX_WARNINGS) {
-                player.sendMessage(Component.text("You will be banned.", NamedTextColor.RED));
-            } else {
-                player.sendMessage(Component.text("Next warning will result in a ban.", NamedTextColor.RED));
-            }
-            player.sendMessage(Component.text(""));
-            player.sendMessage(Component.text("Warn ID: " + id, NamedTextColor.DARK_GRAY));
+            player.sendMessage(Component.text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", NamedTextColor.DARK_GRAY));
+            player.sendMessage(Component.text("You have been warned", NamedTextColor.YELLOW));
+            player.sendMessage(Component.text("Reason: ", NamedTextColor.GRAY)
+                .append(Component.text(reason, NamedTextColor.WHITE)));
+            player.sendMessage(Component.text("Warnings: " + count + "/" + MAX_WARNINGS, NamedTextColor.RED));
+            player.sendMessage(Component.text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", NamedTextColor.DARK_GRAY));
         });
 
-        if (currentWarns >= MAX_WARNINGS) {
-            ban(target, issuer, "Exceeded maximum warnings (" + MAX_WARNINGS + ")", true);
+        if (count >= MAX_WARNINGS) {
+            tempban(target, issuer, "Too many warnings (" + count + "/" + MAX_WARNINGS + ")", 24 * 60 * 60 * 1000L, false);
         }
     }
 
     public void unwarn(UUID target) {
-        int warns = warnCounts.getOrDefault(target, 0);
-        if (warns > 0) {
-            warnCounts.put(target, warns - 1);
-            
-            database.executeAsync(
-                "UPDATE punishments SET active = 0 WHERE target_uuid = ? AND type = 'WARN' AND active = 1 ORDER BY issued_at DESC LIMIT 1",
-                stmt -> {
-                    try {
-                        stmt.setString(1, target.toString());
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            );
-
-            server.getPlayer(target).ifPresent(player ->
-                player.sendMessage(Component.text("One warning has been removed", NamedTextColor.GREEN))
-            );
+        int current = warnCounts.getOrDefault(target, 0);
+        if (current > 0) {
+            warnCounts.put(target, current - 1);
         }
+
+        database.queryAsync(
+            "SELECT id FROM punishments WHERE target_uuid = ? AND type = 'WARN' AND active = 1 ORDER BY issued_at DESC LIMIT 1",
+            stmt -> {
+                try {
+                    stmt.setString(1, target.toString());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            },
+            rs -> {
+                try {
+                    if (rs.next()) {
+                        String id = rs.getString("id");
+                        database.executeAsync(
+                            "UPDATE punishments SET active = 0 WHERE id = ?",
+                            stmt -> {
+                                try {
+                                    stmt.setString(1, id);
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        );
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }
+        );
     }
 
     public void kick(UUID target, UUID issuer, String reason) {
-        String id = generateId("KICK");
-        long now = System.currentTimeMillis();
-
-        Punishment punishment = new Punishment(id, target, issuer, PunishmentType.KICK, reason, now, -1, false);
-        savePunishment(punishment);
-
         server.getPlayer(target).ifPresent(player -> {
             Component message = Component.text("KICKED FROM SERVER", NamedTextColor.RED)
                 .append(Component.newline())
@@ -278,13 +276,15 @@ public class PunishmentManager {
                 .append(Component.text(reason, NamedTextColor.WHITE))
                 .append(Component.newline())
                 .append(Component.text("Kicked by: ", NamedTextColor.GRAY))
-                .append(Component.text(getName(issuer), NamedTextColor.WHITE))
-                .append(Component.newline())
-                .append(Component.newline())
-                .append(Component.text("Kick ID: " + id, NamedTextColor.DARK_GRAY));
+                .append(Component.text(getName(issuer), NamedTextColor.WHITE));
             
             player.disconnect(message);
         });
+
+        String id = generateId("KICK");
+        long now = System.currentTimeMillis();
+        Punishment punishment = new Punishment(id, target, issuer, PunishmentType.KICK, reason, now, -1, true);
+        savePunishment(punishment);
     }
 
     public void ipban(String ip, UUID issuer, String reason) {
@@ -309,31 +309,11 @@ public class PunishmentManager {
             }
         );
 
-        Set<UUID> players = altDetectionManager.getPlayersOnIp(ip);
-        for (UUID player : players) {
-            server.getPlayer(player).ifPresent(p -> {
-                Component message = Component.text("YOUR IP IS BANNED", NamedTextColor.RED)
-                    .append(Component.newline())
-                    .append(Component.newline())
-                    .append(Component.text("Reason: ", NamedTextColor.GRAY))
-                    .append(Component.text(reason, NamedTextColor.WHITE))
-                    .append(Component.newline())
-                    .append(Component.text("Banned by: ", NamedTextColor.GRAY))
-                    .append(Component.text(getName(issuer), NamedTextColor.WHITE))
-                    .append(Component.newline())
-                    .append(Component.text("Date: ", NamedTextColor.GRAY))
-                    .append(Component.text(formatDate(now), NamedTextColor.WHITE))
-                    .append(Component.newline())
-                    .append(Component.newline())
-                    .append(Component.text("This ban is permanent.", NamedTextColor.RED))
-                    .append(Component.newline())
-                    .append(Component.text("All accounts from your IP are banned.", NamedTextColor.RED))
-                    .append(Component.newline())
-                    .append(Component.newline())
-                    .append(Component.text("Ban ID: " + id, NamedTextColor.DARK_GRAY));
-                
-                p.disconnect(message);
-            });
+        Set<UUID> affected = altDetectionManager.getPlayersOnIp(ip);
+        for (UUID player : affected) {
+            server.getPlayer(player).ifPresent(p -> 
+                p.disconnect(createIpBanMessage(punishment))
+            );
         }
     }
 
@@ -356,7 +336,7 @@ public class PunishmentManager {
     private void banAllAlts(UUID target, UUID issuer, String reason) {
         Set<UUID> alts = altDetectionManager.getAlts(target);
         for (UUID alt : alts) {
-            if (!isBanned(alt)) {
+            if (!activeBans.containsKey(alt)) {
                 ban(alt, issuer, reason, false);
             }
         }
@@ -364,26 +344,20 @@ public class PunishmentManager {
 
     public boolean isBanned(UUID player) {
         Punishment ban = activeBans.get(player);
-        if (ban == null) return false;
-        
-        if (ban.isExpired()) {
+        if (ban != null && ban.isExpired()) {
             expirePunishment(ban);
             return false;
         }
-        
-        return true;
+        return ban != null;
     }
 
     public boolean isMuted(UUID player) {
         Punishment mute = activeMutes.get(player);
-        if (mute == null) return false;
-        
-        if (mute.isExpired()) {
+        if (mute != null && mute.isExpired()) {
             expirePunishment(mute);
             return false;
         }
-        
-        return true;
+        return mute != null;
     }
 
     public boolean isIpBanned(String ip) {
@@ -408,10 +382,11 @@ public class PunishmentManager {
 
     public List<Punishment> getHistory(UUID player) {
         if (history.containsKey(player)) {
-            return new ArrayList<>(history.get(player));
+            return history.get(player);
         }
 
         List<Punishment> punishments = new ArrayList<>();
+        
         database.queryAsync(
             "SELECT * FROM punishments WHERE target_uuid = ? ORDER BY issued_at DESC",
             stmt -> {
@@ -549,6 +524,28 @@ public class PunishmentManager {
             .append(Component.text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", NamedTextColor.DARK_GRAY));
     }
 
+    private Component createIpBanMessage(Punishment punishment) {
+        return Component.text("YOUR IP IS BANNED", NamedTextColor.RED)
+            .append(Component.newline())
+            .append(Component.newline())
+            .append(Component.text("Reason: ", NamedTextColor.GRAY))
+            .append(Component.text(punishment.getReason(), NamedTextColor.WHITE))
+            .append(Component.newline())
+            .append(Component.text("Banned by: ", NamedTextColor.GRAY))
+            .append(Component.text(getName(punishment.getIssuer()), NamedTextColor.WHITE))
+            .append(Component.newline())
+            .append(Component.text("Date: ", NamedTextColor.GRAY))
+            .append(Component.text(formatDate(punishment.getIssuedAt()), NamedTextColor.WHITE))
+            .append(Component.newline())
+            .append(Component.newline())
+            .append(Component.text("This ban is permanent.", NamedTextColor.RED))
+            .append(Component.newline())
+            .append(Component.text("All accounts from your IP are banned.", NamedTextColor.RED))
+            .append(Component.newline())
+            .append(Component.newline())
+            .append(Component.text("Ban ID: " + punishment.getId(), NamedTextColor.DARK_GRAY));
+    }
+
     public void checkExpirations() {
         List<Punishment> toExpire = new ArrayList<>();
         
@@ -571,14 +568,14 @@ public class PunishmentManager {
         return prefix + "_" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
     }
 
-    private String getName(UUID uuid) {
+    public String getName(UUID uuid) {
         if (uuid == null) return "System";
         String cached = uuidCache.getName(uuid);
         if (cached != null) return cached;
         return server.getPlayer(uuid).map(Player::getUsername).orElse("Unknown");
     }
 
-    private String formatDate(long timestamp) {
+    public String formatDate(long timestamp) {
         SimpleDateFormat sdf = new SimpleDateFormat("MMM dd, yyyy");
         return sdf.format(new Date(timestamp));
     }
